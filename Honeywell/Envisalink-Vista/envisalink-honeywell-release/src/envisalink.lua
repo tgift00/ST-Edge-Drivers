@@ -32,6 +32,7 @@ local handlers={}
 local evlClient = {}
 
 local throttleSeconds = 2
+local keepaliveSeconds = 30
 
 evlClient.msghandler = {}			-- forward reference to msghandler function
 
@@ -70,9 +71,13 @@ function evlClient.disconnect(driver)
 	if timers.waitlogin then
 		driver:cancel_timer(timers.waitlogin)
 	end
+	if timers.keepalive then
+		driver:cancel_timer(timers.keepalive)
+	end
 	timers.reconnect = nil
 	socket.sleep(.1)
 	timers.waitlogin = nil
+	timers.keepalive = nil
 	
 	if clientsock then
 		driver:unregister_channel_handler(clientsock)
@@ -90,7 +95,7 @@ local function dowaitlogin(driver)
 	timers.waitlogin = nil
 	if not loggedin then
 		log.warn('Failed to log into Envisalink; connect retry in 15 seconds')
-		evlClient.disconnect()
+		evlClient.disconnect(driver)
 		if timers.reconnect then
 			driver:cancel_timer(timers.reconnect)
 			timers.reconnect = nil
@@ -124,7 +129,14 @@ local function throttle_loop(driver)
 		local to_send = table.remove(to_send_queue,1)
 		for _,msg in ipairs(to_send) do
 			log.trace('THROTTLE: TX > ' .. msg)
-			clientsock:send(msg)
+			local bytes, err = clientsock:send(msg)
+			if err then
+				log.error(string.format('Send failed: %s - triggering reconnect', err))
+				to_send_queue = {}
+				evlClient.disconnect(driver)
+				evlClient.reconnect(driver)
+				return
+			end
 		end
 		timers.throttle = driver:call_with_delay(throttleSeconds, throttle_loop, 'Throttle commands to panel')
 	else
@@ -314,14 +326,32 @@ function handlers.handle_login(driver,sock)
 	log.info ('Received login password request; sending password')
 	local to_send = conf.password .. '\n'
 	log.trace ('TX > ' .. to_send)
-	clientsock:send(to_send)
+	local bytes, err = clientsock:send(to_send)
+	if err then
+		log.error(string.format('Login send failed: %s - triggering reconnect', err))
+		evlClient.disconnect(driver)
+		evlClient.reconnect(driver)
+	end
 end		
+
+local function keepalive_loop(driver)
+	if connected and loggedin then
+		log.trace('Sending keepalive poll to Envisalink')
+		send_command(driver,evl.Commands.KeepAlive, '')
+	end
+	timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
+end
 
 function handlers.handle_login_success(driver,sock)
 	log.info('Successfully logged in to Envisalink...')
 	loggedin = true
 	-- Set Partition 1 as active
 	send_command(driver,evl.Commands.ChangeDefaultPartition, '1')
+	-- Start keepalive polling
+	if timers.keepalive then
+		driver:cancel_timer(timers.keepalive)
+	end
+	timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
 function handlers.handle_login_failure(driver,sock)

@@ -36,7 +36,7 @@ caps[capdefs.smokeZone.name]          = capdefs.smokeZone.capability
 ---------------------------------------
 -- variables
 initialized = false
-timers = { ['reconnect'] = nil, ['waitlogin'] = nil, ['throttle'] = nil }
+timers = { ['reconnect'] = nil, ['waitlogin'] = nil, ['throttle'] = nil, ['keepalive'] = nil }
 
 conf = {  ['ip'] = '192.168.1.nnn',
           ['port'] = 4025,
