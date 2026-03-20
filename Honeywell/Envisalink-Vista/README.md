@@ -11,6 +11,13 @@ This driver provides a direct, local connection between the SmartThings hub and 
 
 ## Version Notes
 
+### V 1.07
+- **Connection resilience after power outage:** Added error handling on socket send operations. Failed sends now trigger automatic disconnect and reconnect instead of silently dropping commands.
+- **Keepalive polling:** A periodic keepalive command (`^00,0$`) is sent every 30 seconds to detect dead connections and prevent session timeouts.
+- **Reconnect race condition fix:** Resolved an issue where competing disconnect/reconnect paths could cancel each other's timers, leaving the driver unable to recover.
+- **Direct alarm mode switching:** New partition preference "Direct Alarm Mode Switch" allows switching directly between armed modes (e.g. Armed Away → Armed Instant) without manually disarming first. The driver automatically sends a disarm followed by the new arm command. Configurable delay (1-5 seconds, default 2) between disarm and re-arm. Works from partition commands, STHM integration, and virtual switches. Only allowed in safe states (arming, armedstay, armedaway, armedinstant, armedmax, alarmcleared) — blocked during active alarms.
+- **Bug fix:** Fixed missing `driver` argument in `dowaitlogin` disconnect call that would cause an error if login timed out during reconnect.
+
 ### V 1.06 - 12/26/2021
 - Added carbon monoxide detector device type.
 - Fixed active/inactive status of icon on smoke detector dashboard.

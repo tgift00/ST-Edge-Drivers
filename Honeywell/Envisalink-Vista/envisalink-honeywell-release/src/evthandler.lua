@@ -233,7 +233,7 @@ function event_handler.stnp_notification_handler(driver, body)
         if (device.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value ~= 'ready') and (body.state == 'ready') then event_handler.clear_partition(driver,body.partition) end
         event_handler.zone_handler[device.model](driver,device,body)
       end
-      if device.device_network_id:find('envisalink|s|.+|'.. body.partition) then
+      if device.device_network_id:match('envisalink|s|.+|'.. body.partition .. '$') then
         update_switch(driver,device,body)
       end
     end

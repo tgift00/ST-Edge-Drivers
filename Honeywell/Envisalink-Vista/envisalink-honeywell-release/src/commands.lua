@@ -35,6 +35,25 @@ local evlFunctions = {
   triggerTwo  = 'trigger_two_partition',
 }
 
+local direct_change_states = {
+  arming        = true,
+  armedstay     = true,
+  armedaway     = true,
+  armedinstant  = true,
+  armedmax      = true,
+  alarmcleared  = true,
+}
+
+local function find_partition_device(driver, partition)
+  local device_list = driver:get_devices()
+  for _, dev in ipairs(device_list) do
+    if dev.device_network_id == 'envisalink|p|' .. partition then
+      return dev
+    end
+  end
+  return nil
+end
+
 ----------------
 -- Switch command
 function command_handler.on_off(driver, device, command)
@@ -46,6 +65,19 @@ function command_handler.on_off(driver, device, command)
     evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,conf.alarmcode,partition)
     device:emit_event(capabilities.switch.switch({value = on_off}))
   elseif (on_off == 'on' and evlFunctions[dev_id]) or dev_id == 'chime' then
+    if dev_id ~= 'chime' and dev_id ~= 'disarm' then
+      local part_dev = find_partition_device(driver, partition)
+      if part_dev and part_dev.preferences.directModeChange then
+        local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
+        if direct_change_states[current_state] then
+          local delay = part_dev.preferences.modeChangeDelay or 2
+          log.info(string.format('Switch direct mode change: %s -> %s (disarming first, %ds delay)', current_state, dev_id, delay))
+          command_handler.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
+          command_handler.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = dev_id }, delay)
+          return
+        end
+      end
+    end
     evlClient[evlFunctions[dev_id]](driver,conf.alarmcode,partition)
   end
 end
@@ -103,6 +135,14 @@ function command_handler.send_evl_command(driver,args)
       evlClient[evlFunctions[args.command]](driver,conf.alarmcode,args.partition)
     end
   end
+end
+
+------------------------
+-- Send EVL Command after delay
+function command_handler.send_evl_command_delayed(driver,args,delay)
+  driver:call_with_delay(delay, function()
+    command_handler.send_evl_command(driver,args)
+  end, 'Delayed mode change')
 end
 
 

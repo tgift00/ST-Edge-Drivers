@@ -98,73 +98,60 @@ local function refresh_handler(driver, device, command)
 end
 
 ----------------
+-- States that allow direct mode change (disarm + re-arm)
+local direct_change_states = {
+  arming        = true,
+  armedstay     = true,
+  armedaway     = true,
+  armedinstant  = true,
+  armedmax      = true,
+  alarmcleared  = true,
+}
+
+local function send_partition_command(driver,device,partition,command)
+  if tonumber(partition) ~= 1 and tonumber(partition) ~= 2 then
+    log.error (string.format('Could not determine partition number for %s',device.device_network_id))
+    return
+  end
+  local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
+  if command ~= 'disarm' and device.preferences.directModeChange and direct_change_states[current_state] then
+    local delay = device.preferences.modeChangeDelay or 2
+    log.info(string.format('Direct mode change: %s -> %s (disarming first, %ds delay)', current_state, command, delay))
+    commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
+    commands.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = command }, delay)
+  else
+    commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = command })
+  end
+end
+
+----------------
 -- Send partition command
 local function handle_partition_command(driver,device,cmd)
   log.info(device.id .. ": " .. device.device_network_id .. " > RECEIVED PARTITION COMMAND " .. cmd.args.alarmMode)
+  local partition = device.device_network_id:match('envisalink|p|(%d+)') .. ''
+  send_partition_command(driver,device,partition,cmd.args.alarmMode)
+end
+
+local function sthm_handler(driver,device,cmd,command_name)
+  log.info('SmartThings Home Monitor has triggered ' .. command_name)
+  if device.preferences.integrateSTHM then
     local partition = device.device_network_id:match('envisalink|p|(%d+)') .. ''
-  local args = {
-      ['partition'] = partition,
-      ['command']   = cmd.args.alarmMode,
-    }
-  if tonumber(partition) == 1 or tonumber(partition) == 2 then
-    commands.send_evl_command(driver,args)
+    send_partition_command(driver,device,partition,command_name)
   else
-    log.error (string.format('Could not determine partition number for %s',device.device_network_id))
+    log.info('SmartThings Home Monitor integration is turned off in partition settings.')
   end
 end
 
 local function armAway_handler(driver,device,cmd)
-  log.info('SmartThings Home Monitor has triggered Arm Away')
-  if device.preferences.integrateSTHM then
-    local partition = device.device_network_id:match('envisalink|p|(%d+)') .. ''
-    local args = {
-        ['partition'] = partition,
-        ['command']   = 'armAway',
-      }
-    if tonumber(partition) == 1 or tonumber(partition) == 2 then
-      commands.send_evl_command(driver,args)
-    else
-      log.error (string.format('Could not determine partition number for %s',device.device_network_id))
-    end
-  else
-    log.info('SmartThings Home Monitor integration is turned off in partition settings.')
-  end
+  sthm_handler(driver,device,cmd,'armAway')
 end
 
 local function armStay_handler(driver,device,cmd)
-  log.info('SmartThings Home Monitor has triggered Arm Stay')
-  if device.preferences.integrateSTHM then
-    local partition = device.device_network_id:match('envisalink|p|(%d+)') .. ''
-    local args = {
-        ['partition'] = partition,
-        ['command']   = 'armStay',
-      }
-    if tonumber(partition) == 1 or tonumber(partition) == 2 then
-      commands.send_evl_command(driver,args)
-    else
-      log.error (string.format('Could not determine partition number for %s',device.device_network_id))
-    end
-  else
-    log.info('SmartThings Home Monitor integration is turned off in partition settings.')
-  end
+  sthm_handler(driver,device,cmd,'armStay')
 end
 
 local function disarm_handler(driver,device,cmd)
-  log.info('SmartThings Home Monitor has triggered Disarm')
-  if device.preferences.integrateSTHM then
-    local partition = device.device_network_id:match('envisalink|p|(%d+)') .. ''
-    local args = {
-        ['partition'] = partition,
-        ['command']   = 'disarm',
-      }
-    if tonumber(partition) == 1 or tonumber(partition) == 2 then
-      commands.send_evl_command(driver,args)
-    else
-      log.error (string.format('Could not determine partition number for %s',device.device_network_id))
-    end
-  else
-    log.info('SmartThings Home Monitor integration is turned off in partition settings.')
-  end
+  sthm_handler(driver,device,cmd,'disarm')
 end
 
 local function chime_handler(driver,device,cmd)
