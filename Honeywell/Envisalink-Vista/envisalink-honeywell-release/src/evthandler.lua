@@ -15,6 +15,7 @@
 local log             = require('log')
 local capabilities    = require('st.capabilities')
 local capabilitydefs  = require('capabilitydefs')
+local g               = require('globals')
 
 local event_handler = {}
 
@@ -200,7 +201,7 @@ event_handler.zone_handler['Honeywell Partition']         = update_partition
 function event_handler.clear_partition(driver,partition_num)
   log.debug('Clearing partition ' .. partition_num)
   local kill_timers = {}
-  for zone_type, the_timer in pairs(zone_timers[partition_num]) do
+  for zone_type, the_timer in pairs(g.zone_timers[partition_num]) do
       local the_zone = zone_type:match('(%d+)|.+')
       local the_type = zone_type:match('%d+|(.+)')
       log.debug(string.format('  Clearing zone: %s - %s', the_zone, the_type))
@@ -221,7 +222,7 @@ function event_handler.clear_partition(driver,partition_num)
   end
   for _,zone_type in pairs(kill_timers) do
       log.debug (string.format('Removing %s from zone_timers', zone_type))
-      zone_timers[partition_num][zone_type] = nil
+      g.zone_timers[partition_num][zone_type] = nil
   end
 end
 
@@ -286,8 +287,8 @@ function event_handler.createDevice(driver, dev_type, dev_profile, dev_id, dev_l
   local dev_model = 'Honeywell ' .. dev_profile .. ((dev_type == 'zone' and ' Sensor') or '')
 
   if dev_type == 'zone' then
-    dev_wired = (tonumber(dev_id) > conf.wiredzonemax) and '-wireless' or '-wired'
-    dev_model = dev_model .. ((tonumber(dev_id) > conf.wiredzonemax) and ' Wireless' or ' Wired')
+    dev_wired = (tonumber(dev_id) > g.conf.wiredzonemax) and '-wireless' or '-wired'
+    dev_model = dev_model .. ((tonumber(dev_id) > g.conf.wiredzonemax) and ' Wireless' or ' Wired')
   end
   
 

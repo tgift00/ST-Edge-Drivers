@@ -22,6 +22,7 @@ local utilities = require "utilities"
 local socket = require "cosock.socket"
 local evl = require "envisalinkdefs"
 local events = require "evthandler"
+local g = require "globals"
 
 -- Module variables
 local clientsock
@@ -45,7 +46,7 @@ function evlClient.connect(driver)
 
 	assert(client:bind(listen_ip, listen_port), "LAN socket setsockname")
 
-	local ret, msg = client:connect(conf.ip, conf.port)
+	local ret, msg = client:connect(g.conf.ip, g.conf.port)
 	
 	if ret == nil then
 		log.error (string.format('Could not connect to EnvisaLink: %s', msg))
@@ -65,19 +66,19 @@ function evlClient.disconnect(driver)
 	connected = false
 	loggedin = false
 	
-	if timers.reconnect then
-		driver:cancel_timer(timers.reconnect)
+	if g.timers.reconnect then
+		driver:cancel_timer(g.timers.reconnect)
 	end
-	if timers.waitlogin then
-		driver:cancel_timer(timers.waitlogin)
+	if g.timers.waitlogin then
+		driver:cancel_timer(g.timers.waitlogin)
 	end
-	if timers.keepalive then
-		driver:cancel_timer(timers.keepalive)
+	if g.timers.keepalive then
+		driver:cancel_timer(g.timers.keepalive)
 	end
-	timers.reconnect = nil
+	g.timers.reconnect = nil
 	socket.sleep(.1)
-	timers.waitlogin = nil
-	timers.keepalive = nil
+	g.timers.waitlogin = nil
+	g.timers.keepalive = nil
 	
 	if clientsock then
 		driver:unregister_channel_handler(clientsock)
@@ -92,15 +93,15 @@ local doreconnect						-- Forward reference
 -- This function invoked by delayed timer
 local function dowaitlogin(driver)
 	
-	timers.waitlogin = nil
+	g.timers.waitlogin = nil
 	if not loggedin then
 		log.warn('Failed to log into Envisalink; connect retry in 15 seconds')
 		evlClient.disconnect(driver)
-		if timers.reconnect then
-			driver:cancel_timer(timers.reconnect)
-			timers.reconnect = nil
+		if g.timers.reconnect then
+			driver:cancel_timer(g.timers.reconnect)
+			g.timers.reconnect = nil
 		end
-		timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+		g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
 	else
 		utilities.set_online(driver,'online')
 	end
@@ -110,48 +111,48 @@ end
 doreconnect = function(driver)
 
 	log.info ('Attempting to reconnect to EnvisaLink')
-	timers.reconnect = nil
+	g.timers.reconnect = nil
 	local client = evlClient.connect(driver)
 	
 	if client then
 	
 		log.info ('Re-connected to Envisalink')
 		
-		timers.waitlogin = driver:call_with_delay(3, dowaitlogin, 'Wait for Login')
+		g.timers.waitlogin = driver:call_with_delay(3, dowaitlogin, 'Wait for Login')
 		
 	else
-		timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+		g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
 	end
 end
 
 local function throttle_loop(driver)
-	if #to_send_queue > 0 then
-		local to_send = table.remove(to_send_queue,1)
+	if #g.to_send_queue > 0 then
+		local to_send = table.remove(g.to_send_queue,1)
 		for _,msg in ipairs(to_send) do
 			log.trace('THROTTLE: TX > ' .. msg)
 			local bytes, err = clientsock:send(msg)
 			if err then
 				log.error(string.format('Send failed: %s - triggering reconnect', err))
-				to_send_queue = {}
+				for i = #g.to_send_queue, 1, -1 do g.to_send_queue[i] = nil end
 				evlClient.disconnect(driver)
 				evlClient.reconnect(driver)
 				return
 			end
 		end
-		timers.throttle = driver:call_with_delay(throttleSeconds, throttle_loop, 'Throttle commands to panel')
+		g.timers.throttle = driver:call_with_delay(throttleSeconds, throttle_loop, 'Throttle commands to panel')
 	else
 		log.trace('THROTTLE: No more commands to send')
-		driver:cancel_timer(timers.throttle)
-		timers.throttle = nil
+		driver:cancel_timer(g.timers.throttle)
+		g.timers.throttle = nil
 	end
 end
 
 -------------------------------------------------------------------------------------------------
 local function throttle_send(driver)
-	if timers.throttle then
+	if g.timers.throttle then
 		log.trace ('THROTTLE: Message queued')
 	else
-		timers.throttle = driver:call_with_delay(0, throttle_loop, 'Throttle commands to panel')
+		g.timers.throttle = driver:call_with_delay(0, throttle_loop, 'Throttle commands to panel')
 	end
 end
 
@@ -161,7 +162,7 @@ local function send_command(driver,code,data)
 	log.trace ('TX > ' .. to_send)
 	local send_array ={}
 	table.insert(send_array,to_send)
-	table.insert(to_send_queue,send_array)
+	table.insert(g.to_send_queue,send_array)
 	throttle_send(driver)
 end
 
@@ -171,7 +172,7 @@ local function send_raw(driver,to_send)
 	log.trace ('TX > ' .. to_send)
 	local send_array ={}
 	table.insert(send_array,to_send)
-	table.insert(to_send_queue,send_array)
+	table.insert(g.to_send_queue,send_array)
 	throttle_send(driver)
 end
 
@@ -187,7 +188,7 @@ local function keypresses_to_partition(driver,partitionNumber,keypresses)
 	for char in keypresses:gmatch(".") do
 		table.insert(send_array,'^' .. evl.Commands.PartitionKeypress .. ',' .. partitionNumber .. ',' .. char .. '$\n')
 	end
-	table.insert(to_send_queue,send_array)
+	table.insert(g.to_send_queue,send_array)
 	throttle_send(driver)
 end
 
@@ -324,7 +325,7 @@ end
 -- Login to Envisalink; once successful, send Refresh request
 function handlers.handle_login(driver,sock)
 	log.info ('Received login password request; sending password')
-	local to_send = conf.password .. '\n'
+	local to_send = g.conf.password .. '\n'
 	log.trace ('TX > ' .. to_send)
 	local bytes, err = clientsock:send(to_send)
 	if err then
@@ -339,7 +340,7 @@ local function keepalive_loop(driver)
 		log.trace('Sending keepalive poll to Envisalink')
 		send_command(driver,evl.Commands.KeepAlive, '0')
 	end
-	timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
+	g.timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
 function handlers.handle_login_success(driver,sock)
@@ -348,10 +349,10 @@ function handlers.handle_login_success(driver,sock)
 	-- Set Partition 1 as active
 	send_command(driver,evl.Commands.ChangeDefaultPartition, '1')
 	-- Start keepalive polling
-	if timers.keepalive then
-		driver:cancel_timer(timers.keepalive)
+	if g.timers.keepalive then
+		driver:cancel_timer(g.timers.keepalive)
 	end
-	timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
+	g.timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
 function handlers.handle_login_failure(driver,sock)
@@ -427,10 +428,10 @@ function handlers.handle_keypad_update(driver,sock,data)
 		local flags = parse_led_bitfield(led_bitfield)
 		local partition_status = get_partition_state(flags, alpha)
 		local open_timer_count = 0
-		for _ in pairs(zone_timers[partition]) do open_timer_count = open_timer_count + 1 end
+		for _ in pairs(g.zone_timers[partition]) do open_timer_count = open_timer_count + 1 end
 		local new_msg = data[1] .. ',' .. data [2] .. ',' .. data [3] .. ',' .. data [4] .. ',' .. data [5] .. ',' .. data [6]
-		if (new_msg ~= last_event[partition]) or (open_timer_count > 1) then
-			last_event[partition] = new_msg
+		if (new_msg ~= g.last_event[partition]) or (open_timer_count > 1) then
+			g.last_event[partition] = new_msg
 			local partition_code = flags.not_used2 and flags.not_used3
 			local partition_response = {
 				type 		= 'partition',
@@ -474,20 +475,20 @@ function handlers.handle_keypad_update(driver,sock,data)
 				if timer_type then
 					-- Increment zone timers. This is a workaround since the Vista doesn't notify on zone closure
 					local timer_count = 0
-					for _, the_timer in pairs(zone_timers[partition]) do
-						zone_timers[partition][_] = the_timer + 1
+						for _, the_timer in pairs(g.zone_timers[partition]) do
+						g.zone_timers[partition][_] = the_timer + 1
 						timer_count = timer_count + 1
 					end
-					utilities.disptable(zone_timers[partition], '  ')
-					if zone_timers[partition][zone_user .. '|' .. timer_type] then
-						log.debug (string.format('Zone timer for %s reset from %s to 0',zone_user,zone_timers[partition][zone_user .. '|' .. timer_type]))
+					utilities.disptable(g.zone_timers[partition], '  ')
+					if g.zone_timers[partition][zone_user .. '|' .. timer_type] then
+						log.debug (string.format('Zone timer for %s reset from %s to 0',zone_user,g.zone_timers[partition][zone_user .. '|' .. timer_type]))
 					end
-					zone_timers[partition][zone_user .. '|' .. timer_type] = 0
+					g.zone_timers[partition][zone_user .. '|' .. timer_type] = 0
 					
 					local kill_timers = {}
-					for zone_type, the_timer in pairs(zone_timers[partition]) do
+					for zone_type, the_timer in pairs(g.zone_timers[partition]) do
 						-- If zone is more than 2 overdue in showing on panel, assume it has closed
-						if the_timer >= timer_count + conf.zoneclosedelay then
+						if the_timer >= timer_count + g.conf.zoneclosedelay then
 							local the_zone = zone_type:match('(%d+)|.+')
 							local the_type = zone_type:match('%d+|(.+)')
 							local the_zone_response = {
@@ -509,7 +510,7 @@ function handlers.handle_keypad_update(driver,sock,data)
 					-- Kill any timers for zones that are being closed
 					for _,zone_type in pairs(kill_timers) do
 						log.debug (string.format('Removing %s from zone_timers', zone_type))
-						zone_timers[partition][zone_type] = nil
+						g.zone_timers[partition][zone_type] = nil
 					end
 				end
 			end
@@ -561,11 +562,11 @@ local function handle_line(driver, sock, input)
 end
 
 function evlClient.reconnect(driver)
-	if timers.reconnect then
-		driver:cancel_timer(timers.reconnect)
-		timers.reconnect = nil
+	if g.timers.reconnect then
+		driver:cancel_timer(g.timers.reconnect)
+		g.timers.reconnect = nil
 	end
-	timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+	g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
 
 end
 

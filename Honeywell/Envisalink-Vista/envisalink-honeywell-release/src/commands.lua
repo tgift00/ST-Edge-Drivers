@@ -19,6 +19,7 @@ local socket = require "cosock.socket"
 local evlClient = require "envisalink"
 local events = require "evthandler"
 local capabilities    = require('st.capabilities')
+local g = require('globals')
 
 local command_handler = {}
 
@@ -62,7 +63,7 @@ function command_handler.on_off(driver, device, command)
   local partition = device.device_network_id:match('envisalink|s|.+|(%d+)')
   log.warn (string.format('Switch flipped (%s) %s Partition %d',on_off,dev_id,partition))
   if (evlFunctions[dev_id] and (dev_id == 'triggerOne' or dev_id == 'triggerTwo')) then
-    evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,conf.alarmcode,partition)
+    evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,g.conf.alarmcode,partition)
     device:emit_event(capabilities.switch.switch({value = on_off}))
   elseif (on_off == 'on' and evlFunctions[dev_id]) or dev_id == 'chime' then
     if dev_id ~= 'chime' and dev_id ~= 'disarm' then
@@ -70,7 +71,7 @@ function command_handler.on_off(driver, device, command)
       if part_dev and part_dev.preferences.directModeChange then
         local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
         if direct_change_states[current_state] then
-          local delay = part_dev.preferences.modeChangeDelay or 2
+          local delay = 2
           log.info(string.format('Switch direct mode change: %s -> %s (disarming first, %ds delay)', current_state, dev_id, delay))
           command_handler.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
           command_handler.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = dev_id }, delay)
@@ -78,7 +79,7 @@ function command_handler.on_off(driver, device, command)
         end
       end
     end
-    evlClient[evlFunctions[dev_id]](driver,conf.alarmcode,partition)
+    evlClient[evlFunctions[dev_id]](driver,g.conf.alarmcode,partition)
   end
 end
 
@@ -86,7 +87,7 @@ end
 -- Refresh triggered by a zone
 function command_handler.refresh_zone(driver,device)
   local partition = device.preferences.partition
-  last_event[partition] = nil
+  g.last_event[partition] = nil
   local partition_id = 'envisalink|p|' .. partition
   local device_list = driver:get_devices()
   for _, dev in ipairs(device_list) do
@@ -108,7 +109,7 @@ end
 function command_handler.refresh_partition(driver,device)
   local partition_num = device.device_network_id:match('envisalink|p|(.+)')
   log.warn('Refresh partition ' .. partition_num)
-  last_event[partition_num] = nil
+  g.last_event[partition_num] = nil
   local device_list = driver:get_devices()
   if device.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value == "ready" then
     local bypass_partition = device.state_cache.main.bypassable.bypassStatus.value == 'bypassed'
@@ -130,9 +131,9 @@ end
 function command_handler.send_evl_command(driver,args)
   if evlFunctions[args.command] then
     if args.command == 'bypass' then
-      evlClient[evlFunctions[args.command]](driver,conf.alarmcode,args.partition,args.zone)
+      evlClient[evlFunctions[args.command]](driver,g.conf.alarmcode,args.partition,args.zone)
     else
-      evlClient[evlFunctions[args.command]](driver,conf.alarmcode,args.partition)
+      evlClient[evlFunctions[args.command]](driver,g.conf.alarmcode,args.partition)
     end
   end
 end

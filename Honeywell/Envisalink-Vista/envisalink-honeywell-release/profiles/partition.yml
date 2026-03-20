@@ -44,20 +44,11 @@ preferences:
       default: false
   - title: "Direct Alarm Mode Switch"
     name: directModeChange
-    description: "Allow switching directly between armed modes (auto-disarm and re-arm)"
+    description: "Allow switching directly between armed modes (auto-disarm and re-arm with 2 second delay)"
     required: true
     preferenceType: boolean
     definition:
       default: false
-  - title: "Mode Change Delay (seconds)"
-    name: modeChangeDelay
-    description: "Delay in seconds between disarm and re-arm when switching directly between armed modes"
-    required: true
-    preferenceType: integer
-    definition:
-      minimum: 1
-      maximum: 5
-      default: 2
   - title: "Display 'Arm Instant' mode"
     name: armInstantSupported
     description: "Choose which alarm modes should be displayed as options for this partition"

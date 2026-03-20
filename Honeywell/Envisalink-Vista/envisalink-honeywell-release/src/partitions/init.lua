@@ -115,7 +115,7 @@ local function send_partition_command(driver,device,partition,command)
   end
   local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
   if command ~= 'disarm' and device.preferences.directModeChange and direct_change_states[current_state] then
-    local delay = device.preferences.modeChangeDelay or 2
+    local delay = 2
     log.info(string.format('Direct mode change: %s -> %s (disarming first, %ds delay)', current_state, command, delay))
     commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
     commands.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = command }, delay)

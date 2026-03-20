@@ -20,6 +20,7 @@ local utilities = require('utilities')
 local capdefs = require('capabilitydefs')
 local evlClient = require('envisalink')
 local events = require "evthandler"
+local g = require('globals')
 
 
 local function initconfigEVL(device)
@@ -30,19 +31,19 @@ local function initconfigEVL(device)
       
   ip, port = utilities.validate_address(device.preferences.lanAddressEVL)
   if ip ~= nil then
-    conf.ip = ip
-    conf.port = port
+    g.conf.ip = ip
+    g.conf.port = port
     addr_is_valid = true
   else
     log.warn ('Invalid EVL LAN address')
   end
       
-  conf.alarmcode = device.preferences.alarmCodeEVL
-  conf.password = device.preferences.passwordEVL
-  conf.zoneclosedelay = tonumber(device.preferences.zoneCloseDelay)
-  conf.wiredzonemax = tonumber(device.preferences.wiredZoneMax)
+  g.conf.alarmcode = device.preferences.alarmCodeEVL
+  g.conf.password = device.preferences.passwordEVL
+  g.conf.zoneclosedelay = tonumber(device.preferences.zoneCloseDelay)
+  g.conf.wiredzonemax = tonumber(device.preferences.wiredZoneMax)
 
-  if conf.alarmcode ~= nil then
+  if g.conf.alarmcode ~= nil then
     if string.len(device.preferences.alarmCodeEVL) ~= 4 then
       log.warn('Invalid alarmcode (not 4 digits')
     end
@@ -50,9 +51,32 @@ local function initconfigEVL(device)
     log.warn('Invalid alarmcode (not a number)')
   end
   
-  log.info (string.format('Using config prefs: %s:%d, alarmcode: %d', conf.ip, conf.port, conf.alarmcode))
+  log.info (string.format('Using config prefs: %s:%d, alarmcode: %d', g.conf.ip, g.conf.port, g.conf.alarmcode))
   return(addr_is_valid)
 
+end
+
+local pref_titles = {
+  lanAddressEVL      = 'Envisalink LAN Address',
+  integrateSTHM      = 'STHM -> Partition Integration',
+  zoneCloseDelay     = 'Zone Close Delay',
+  wiredZoneMax       = 'Highest Wired Zone',
+  directModeChange   = 'Direct Alarm Mode Switch',
+  addPartition       = 'Add Partition 2',
+  addSwitches        = 'Add Virtual Switches',
+  addTriggers        = 'Add Triggers',
+  addZones           = 'Add Zones',
+  armInstantSupported = 'Arm Instant',
+  armMaxSupported    = 'Arm Max',
+  armNightSupported  = 'Arm Night',
+}
+
+local function log_preferences(device)
+  log.info('=== Partition Preferences ===')
+  for name, title in pairs(pref_titles) do
+    log.info(string.format('  %-35s %s', title .. ':', tostring(device.preferences[name] or 'not set')))
+  end
+  log.info('=============================')
 end
 
 ---------------------------------------
@@ -62,14 +86,15 @@ local function init_handler(driver, device)
 
   socket.sleep(5)
 
-  initialized = true
+  g.initialized = true
 
+  log_preferences(device)
   log.warn('Starting up connection')
   if initconfigEVL(device) then
     if not evlClient.is_loggedin(driver) then
       if not evlClient.is_connected(driver) then
         if not commands.connect_to_envisalink(driver,device) then
-          if not timers.reconnect then
+          if not g.timers.reconnect then
             evlClient.reconnect(driver)
           end
         end
@@ -98,8 +123,8 @@ local function infoChanged_handler(driver,device, event, args)
   local changed = false
   local connection_changed = false
   
-  conf.zoneclosedelay = tonumber(device.preferences.zoneCloseDelay)
-  conf.wiredzonemax = tonumber(device.preferences.wiredZoneMax)
+  g.conf.zoneclosedelay = tonumber(device.preferences.zoneCloseDelay)
+  g.conf.wiredzonemax = tonumber(device.preferences.wiredZoneMax)
 
   if args.old_st_store.preferences.lanAddressEVL ~= device.preferences.lanAddressEVL then
     changed = true
@@ -118,15 +143,15 @@ local function infoChanged_handler(driver,device, event, args)
     
       log.info ('Renewing connection to Envisalink')
 
-      if timers.reconnect then
-        driver:cancel_timer(timers.reconnect)
+      if g.timers.reconnect then
+        driver:cancel_timer(g.timers.reconnect)
       end
-      if timers.waitlogin then
-        driver:cancel_timer(timers.waitlogin)
+      if g.timers.waitlogin then
+        driver:cancel_timer(g.timers.waitlogin)
       end
-      timers.reconnect = nil
+      g.timers.reconnect = nil
       socket.sleep(.1)
-      timers.waitlogin = nil
+      g.timers.waitlogin = nil
         
       if evlClient.is_connected(driver) then
         evlClient.disconnect(driver)
@@ -203,7 +228,7 @@ end
 
 local function removed_handler(driver, device)
   log.info(device.id .. ": " .. device.device_network_id .. " > REMOVED PRIMARY PARTITION")
-  initialized = false
+  g.initialized = false
 end
 
 ---------------------------------------

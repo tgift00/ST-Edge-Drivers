@@ -15,50 +15,16 @@
 local Driver = require('st.driver')
 local log = require('log')
 local events = require "evthandler"
+local g = require('globals')
 
 ---------------------------------------
 -- local imports
 local lifecycles = require('lifecycles')
 
 ---------------------------------------
--- custom capabilities
---[[
-caps[capdefs.statusMessage.name]      = capdefs.statusMessage.capability
-caps[capdefs.alarmMode.name]          = capdefs.alarmMode.capability
-caps[capdefs.bypass.name]             = capdefs.bypass.capability
-caps[capdefs.carbonMonoxideZone.name] = capdefs.carbonMonoxideZone.capability
-caps[capdefs.contactZone.name]        = capdefs.contactZone.capability
-caps[capdefs.glassBreakZone.name]     = capdefs.glassBreakZone.capability
-caps[capdefs.leakZone.name]           = capdefs.leakZone.capability
-caps[capdefs.motionZone.name]         = capdefs.motionZone.capability
-caps[capdefs.smokeZone.name]          = capdefs.smokeZone.capability
---]]
----------------------------------------
--- variables
-initialized = false
-timers = { ['reconnect'] = nil, ['waitlogin'] = nil, ['throttle'] = nil, ['keepalive'] = nil }
-
-conf = {  ['ip'] = '192.168.1.nnn',
-          ['port'] = 4025,
-          ['password'] = 'user',
-          ['alarmcode']   = '1111',
-          ['zoneclosedelay'] = 2,
-          ['wiredzonemax'] = 8,
-          ['partitions'] = { [1] = {}, [2] = {} },
-          ['zones'] = { [1] = {}, [2] = {} },
-          ['switches'] = { [1] = {}, [2] = {} },
-}
-
-zone_timers = { [1] = {}, [2] = {} }
-
-last_event = {}
-
-to_send_queue = {}
-
----------------------------------------
 -- driver functions
 local function discovery_handler(driver, _, should_continue)
-  if not initialized then
+  if not g.initialized then
     log.info("Creating primary partition device")
     events.createDevice(driver, 'partition', 'Primary Partition', 1, nil)
   else
