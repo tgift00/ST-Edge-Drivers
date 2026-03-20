@@ -136,12 +136,13 @@ function command_handler.connect_to_envisalink(driver,device)
       log.debug ('Waiting for login...')
       socket.sleep(3)
       retries = retries - 1
-    until evlClient.is_loggedin(driver) or (retries == 0)
+    until evlClient.is_loggedin(driver) or not evlClient.is_connected(driver) or (retries == 0)
     
     if evlClient.is_loggedin(driver) then
       utilities.set_online(driver,'online')
       return true
-      
+    elseif not evlClient.is_connected(driver) then
+      log.warn ('Connection lost during login - reconnect already scheduled')
     else
       evlClient.disconnect(driver)
       log.error ('Failed to log into EnvisaLink')

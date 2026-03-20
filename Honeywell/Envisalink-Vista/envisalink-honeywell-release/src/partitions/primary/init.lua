@@ -69,7 +69,9 @@ local function init_handler(driver, device)
     if not evlClient.is_loggedin(driver) then
       if not evlClient.is_connected(driver) then
         if not commands.connect_to_envisalink(driver,device) then
-          evlClient.reconnect(driver)
+          if not timers.reconnect then
+            evlClient.reconnect(driver)
+          end
         end
       end
     end

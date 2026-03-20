@@ -337,7 +337,7 @@ end
 local function keepalive_loop(driver)
 	if connected and loggedin then
 		log.trace('Sending keepalive poll to Envisalink')
-		send_command(driver,evl.Commands.KeepAlive, '')
+		send_command(driver,evl.Commands.KeepAlive, '0')
 	end
 	timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
