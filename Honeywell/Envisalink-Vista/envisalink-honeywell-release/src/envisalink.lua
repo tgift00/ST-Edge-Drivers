@@ -32,9 +32,6 @@ local handlers={}
 
 local evlClient = {}
 
-local throttleSeconds = 2
-local keepaliveSeconds = 30
-
 evlClient.msghandler = {}			-- forward reference to msghandler function
 
 function evlClient.connect(driver)
@@ -101,7 +98,7 @@ local function dowaitlogin(driver)
 			driver:cancel_timer(g.timers.reconnect)
 			g.timers.reconnect = nil
 		end
-		g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+		g.timers.reconnect = driver:call_with_delay(g.reconnectSeconds, doreconnect, 'Re-connect timer')
 	else
 		utilities.set_online(driver,'online')
 	end
@@ -118,10 +115,10 @@ doreconnect = function(driver)
 	
 		log.info ('Re-connected to Envisalink')
 		
-		g.timers.waitlogin = driver:call_with_delay(3, dowaitlogin, 'Wait for Login')
+		g.timers.waitlogin = driver:call_with_delay(g.loginWaitSeconds, dowaitlogin, 'Wait for Login')
 		
 	else
-		g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+		g.timers.reconnect = driver:call_with_delay(g.reconnectSeconds, doreconnect, 'Re-connect timer')
 	end
 end
 
@@ -139,7 +136,7 @@ local function throttle_loop(driver)
 				return
 			end
 		end
-		g.timers.throttle = driver:call_with_delay(throttleSeconds, throttle_loop, 'Throttle commands to panel')
+		g.timers.throttle = driver:call_with_delay(g.throttleSeconds, throttle_loop, 'Throttle commands to panel')
 	else
 		log.trace('THROTTLE: No more commands to send')
 		driver:cancel_timer(g.timers.throttle)
@@ -340,7 +337,7 @@ local function keepalive_loop(driver)
 		log.trace('Sending keepalive poll to Envisalink')
 		send_command(driver,evl.Commands.KeepAlive, '0')
 	end
-	g.timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
+	g.timers.keepalive = driver:call_with_delay(g.keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
 function handlers.handle_login_success(driver,sock)
@@ -352,7 +349,7 @@ function handlers.handle_login_success(driver,sock)
 	if g.timers.keepalive then
 		driver:cancel_timer(g.timers.keepalive)
 	end
-	g.timers.keepalive = driver:call_with_delay(keepaliveSeconds, keepalive_loop, 'Keepalive timer')
+	g.timers.keepalive = driver:call_with_delay(g.keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
 function handlers.handle_login_failure(driver,sock)
@@ -566,7 +563,7 @@ function evlClient.reconnect(driver)
 		driver:cancel_timer(g.timers.reconnect)
 		g.timers.reconnect = nil
 	end
-	g.timers.reconnect = driver:call_with_delay(15, doreconnect, 'Re-connect timer')
+	g.timers.reconnect = driver:call_with_delay(g.reconnectSeconds, doreconnect, 'Re-connect timer')
 
 end
 

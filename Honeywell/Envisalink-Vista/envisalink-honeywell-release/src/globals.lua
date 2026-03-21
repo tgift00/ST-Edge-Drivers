@@ -15,6 +15,27 @@ local globals = {
   zone_timers = { [1] = {}, [2] = {} },
   last_event = {},
   to_send_queue = {},
+  direct_change_states = {
+    arming        = true,
+    armedstay     = true,
+    armedaway     = true,
+    armedinstant  = true,
+    armedmax      = true,
+    alarmcleared  = true,
+  },
+  command_to_state = {
+    armStay     = 'armedstay',
+    armAway     = 'armedaway',
+    armInstant  = 'armedinstant',
+    armMax      = 'armedmax',
+    armNight    = 'armednight',
+  },
+  reconnectSeconds = 15,
+  loginWaitSeconds = 3,
+  connectRetrySeconds = 5,
+  modeChangeDelay = 2,
+  throttleSeconds = 2,
+  keepaliveSeconds = 30,
 }
 
 return globals

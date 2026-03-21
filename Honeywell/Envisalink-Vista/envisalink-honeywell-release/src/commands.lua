@@ -36,14 +36,6 @@ local evlFunctions = {
   triggerTwo  = 'trigger_two_partition',
 }
 
-local direct_change_states = {
-  arming        = true,
-  armedstay     = true,
-  armedaway     = true,
-  armedinstant  = true,
-  armedmax      = true,
-  alarmcleared  = true,
-}
 
 local function find_partition_device(driver, partition)
   local device_list = driver:get_devices()
@@ -70,8 +62,12 @@ function command_handler.on_off(driver, device, command)
       local part_dev = find_partition_device(driver, partition)
       if part_dev and part_dev.preferences.directModeChange then
         local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
-        if direct_change_states[current_state] then
-          local delay = 2
+        if g.direct_change_states[current_state] then
+          if g.command_to_state[dev_id] == current_state then
+            log.info(string.format('Already in %s - skipping direct mode change', current_state))
+            return
+          end
+          local delay = g.modeChangeDelay
           log.info(string.format('Switch direct mode change: %s -> %s (disarming first, %ds delay)', current_state, dev_id, delay))
           command_handler.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
           command_handler.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = dev_id }, delay)
@@ -161,7 +157,7 @@ function command_handler.connect_to_envisalink(driver,device)
     local retries = 2
   
     repeat
-      socket.sleep(5)
+      socket.sleep(g.connectRetrySeconds)
       client = evlClient.connect(driver)
       retries = retries - 1
     until retries == 0

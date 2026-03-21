@@ -12,13 +12,13 @@ This driver provides a direct, local connection between the SmartThings hub and 
 ## Version Notes
 
 ### V 1.07
-- **Direct alarm mode switching:** New partition preference "Direct Alarm Mode Switch" allows switching directly between armed modes (e.g. Armed Away → Armed Instant) without manually disarming first. The driver automatically sends a disarm followed by the new arm command with a 2 second delay. Works from partition commands, STHM integration, and virtual switches. Only allowed in safe states (arming, armedstay, armedaway, armedinstant, armedmax, alarmcleared) — blocked during active alarms.
+- **Direct alarm mode switching:** New partition preference "Direct Alarm Mode Switch" allows switching directly between armed modes (e.g. Armed Away → Armed Instant) without manually disarming first. The driver automatically sends a disarm followed by the new arm command with a 2 second delay. Works from partition commands, STHM integration, and virtual switches. Only allowed in safe states (arming, armedstay, armedaway, armedinstant, armedmax, alarmcleared) — blocked during active alarms. Requesting the same mode already active is ignored.
 - **Connection resilience after power outage:** Added error handling on socket send operations. Failed sends now trigger automatic disconnect and reconnect instead of silently dropping commands.
 - **Keepalive polling:** A periodic keepalive command (`^00,0$`) is sent every 30 seconds to detect dead connections and prevent session timeouts.
 - **Reconnect race condition fix:** Resolved an issue where competing disconnect/reconnect paths could cancel each other's timers, leaving the driver unable to recover.
 - **Switch state fix:** Fixed virtual switch state matching to use anchored pattern match, preventing partial matches on device network IDs.
 - **Preference logging:** Partition preferences are now logged on startup for easier troubleshooting.
-- **Code cleanup:** Refactored shared global variables into a `globals.lua` module.
+- **Code cleanup:** Refactored shared global variables, lookup tables, and timing constants into a `globals.lua` module.
 - **Bug fix:** Fixed missing `driver` argument in `dowaitlogin` disconnect call that would cause an error if login timed out during reconnect.
 
 ### V 1.06 - 12/26/2021

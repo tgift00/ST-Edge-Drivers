@@ -17,6 +17,7 @@ local log = require('log')
 local commands = require('commands')
 local capdefs = require('capabilitydefs')
 local events = require "evthandler"
+local g = require('globals')
 
 local models_supported = {
   'Honeywell Primary Partition',
@@ -99,14 +100,6 @@ end
 
 ----------------
 -- States that allow direct mode change (disarm + re-arm)
-local direct_change_states = {
-  arming        = true,
-  armedstay     = true,
-  armedaway     = true,
-  armedinstant  = true,
-  armedmax      = true,
-  alarmcleared  = true,
-}
 
 local function send_partition_command(driver,device,partition,command)
   if tonumber(partition) ~= 1 and tonumber(partition) ~= 2 then
@@ -114,8 +107,12 @@ local function send_partition_command(driver,device,partition,command)
     return
   end
   local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
-  if command ~= 'disarm' and device.preferences.directModeChange and direct_change_states[current_state] then
-    local delay = 2
+  if command ~= 'disarm' and device.preferences.directModeChange and g.direct_change_states[current_state] then
+    if g.command_to_state[command] == current_state then
+      log.info(string.format('Already in %s - skipping direct mode change', current_state))
+      return
+    end
+    local delay = g.modeChangeDelay
     log.info(string.format('Direct mode change: %s -> %s (disarming first, %ds delay)', current_state, command, delay))
     commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
     commands.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = command }, delay)
