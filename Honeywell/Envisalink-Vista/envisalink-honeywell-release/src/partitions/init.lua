@@ -18,6 +18,7 @@ local commands = require('commands')
 local capdefs = require('capabilitydefs')
 local events = require "evthandler"
 local g = require('globals')
+local utilities = require('utilities')
 
 local models_supported = {
   'Honeywell Primary Partition',
@@ -107,18 +108,29 @@ local function send_partition_command(driver,device,partition,command)
     return
   end
   local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
-  if command ~= 'disarm' and device.preferences.directModeChange and g.direct_change_states[current_state] then
-    if g.command_to_state[command] == current_state then
-      log.info(string.format('Already in %s - skipping direct mode change', current_state))
+  if command ~= 'disarm' and g.direct_change_states[current_state] then
+    local already_active = utilities.is_already_active(device, command, capdefs)
+    if already_active then
+      log.info(string.format('Already in %s - skipping command %s', current_state, command))
+      local evt = capabilities[capdefs.alarmMode.name].alarmMode({value = current_state}, {visibility = {displayed = false}})
+      evt.state_change = true
+      device:emit_event(evt)
       return
     end
-    local delay = g.modeChangeDelay
-    log.info(string.format('Direct mode change: %s -> %s (disarming first, %ds delay)', current_state, command, delay))
-    commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
-    commands.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = command }, delay)
-  else
-    commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = command })
+    if device.preferences.directModeChange then
+      local delay = g.modeChangeDelay
+      log.info(string.format('Direct mode change: %s -> %s (disarming first, %ds delay)', current_state, command, delay))
+      commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
+      commands.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = command }, delay)
+      return
+    end
+    log.info(string.format('Panel is %s and direct mode change disabled - rejecting %s', current_state, command))
+    local evt = capabilities[capdefs.alarmMode.name].alarmMode({value = current_state}, {visibility = {displayed = false}})
+    evt.state_change = true
+    device:emit_event(evt)
+    return
   end
+  commands.send_evl_command(driver, { ['partition'] = partition, ['command'] = command })
 end
 
 ----------------

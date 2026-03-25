@@ -13,6 +13,8 @@ This driver provides a direct, local connection between the SmartThings hub and 
 
 ### V 1.07
 - **Direct alarm mode switching:** New partition preference "Direct Alarm Mode Switch" allows switching directly between armed modes (e.g. Armed Away → Armed Instant) without manually disarming first. The driver automatically sends a disarm followed by the new arm command with a 2 second delay. Works from partition commands, STHM integration, and virtual switches. Only allowed in safe states (arming, armedstay, armedaway, armedinstant, armedmax, alarmcleared) — blocked during active alarms. Requesting the same mode already active is ignored.
+- **No-op Switch handling:** Partition and switches now properly handle off commands and reject arm commands when direct mode change is disabled.  This eliminated the network error messages that would occur.
+- **Event ordering:** Partition events now always emit before switch events for consistent ordering.  This improves using pre-conditions in routines so partition changes always come prior to switch changes.
 - **Connection resilience after power outage:** Added error handling on socket send operations. Failed sends now trigger automatic disconnect and reconnect instead of silently dropping commands.
 - **Keepalive polling:** A periodic keepalive command (`^00,0$`) is sent every 30 seconds to detect dead connections and prevent session timeouts.
 - **Reconnect race condition fix:** Resolved an issue where competing disconnect/reconnect paths could cancel each other's timers, leaving the driver unable to recover.

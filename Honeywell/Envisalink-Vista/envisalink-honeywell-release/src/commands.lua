@@ -57,24 +57,52 @@ function command_handler.on_off(driver, device, command)
   if (evlFunctions[dev_id] and (dev_id == 'triggerOne' or dev_id == 'triggerTwo')) then
     evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,g.conf.alarmcode,partition)
     device:emit_event(capabilities.switch.switch({value = on_off}))
+  elseif on_off == 'off' and dev_id ~= 'chime' then
+    local part_dev = find_partition_device(driver, partition)
+    local sw_state = 'off'
+    if part_dev then
+      local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
+      local map = g.command_map[dev_id]
+      if map and map.state == current_state then sw_state = 'on' end
+    end
+    local evt = capabilities.switch.switch({value = sw_state})
+    evt.state_change = true
+    device:emit_event(evt)
   elseif (on_off == 'on' and evlFunctions[dev_id]) or dev_id == 'chime' then
     if dev_id ~= 'chime' and dev_id ~= 'disarm' then
       local part_dev = find_partition_device(driver, partition)
-      if part_dev and part_dev.preferences.directModeChange then
+      if part_dev then
         local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
         if g.direct_change_states[current_state] then
-          if g.command_to_state[dev_id] == current_state then
-            log.info(string.format('Already in %s - skipping direct mode change', current_state))
+          local already_active = utilities.is_already_active(part_dev, dev_id, capabilitydefs)
+          if already_active then
+            log.info(string.format('Already in %s - skipping command %s', current_state, dev_id))
+            local map = g.command_map[dev_id]
+            local sw_state = (map and map.state == current_state) and 'on' or 'off'
+            local evt = capabilities.switch.switch({value = sw_state})
+            evt.state_change = true
+            device:emit_event(evt)
             return
           end
-          local delay = g.modeChangeDelay
-          log.info(string.format('Switch direct mode change: %s -> %s (disarming first, %ds delay)', current_state, dev_id, delay))
-          command_handler.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
-          command_handler.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = dev_id }, delay)
+          if part_dev.preferences.directModeChange then
+            local delay = g.modeChangeDelay
+            log.info(string.format('Switch direct mode change: %s -> %s (disarming first, %ds delay)', current_state, dev_id, delay))
+            device:emit_event(capabilities.switch.switch.on())
+            command_handler.send_evl_command(driver, { ['partition'] = partition, ['command'] = 'disarm' })
+            command_handler.send_evl_command_delayed(driver, { ['partition'] = partition, ['command'] = dev_id }, delay)
+            return
+          end
+          log.info(string.format('Panel is %s and direct mode change disabled - rejecting %s', current_state, dev_id))
+          local map = g.command_map[dev_id]
+          local sw_state = (map and map.state == current_state) and 'on' or 'off'
+          local evt = capabilities.switch.switch({value = sw_state})
+          evt.state_change = true
+          device:emit_event(evt)
           return
         end
       end
     end
+    device:emit_event(capabilities.switch.switch({value = on_off}))
     evlClient[evlFunctions[dev_id]](driver,g.conf.alarmcode,partition)
   end
 end

@@ -228,6 +228,9 @@ end
 
 function event_handler.stnp_notification_handler(driver, body)
   local device_list = driver:get_devices()
+  -- Collect switches during iteration and update after partition emits
+  -- to ensure all partition events are emitted before switch events
+  local switches = {}
   for _, device in ipairs(device_list) do
     if body.type == 'partition' then
       if device.device_network_id == 'envisalink|p|' .. body.partition then
@@ -235,7 +238,7 @@ function event_handler.stnp_notification_handler(driver, body)
         event_handler.zone_handler[device.model](driver,device,body)
       end
       if device.device_network_id:match('envisalink|s|.+|'.. body.partition .. '$') then
-        update_switch(driver,device,body)
+        table.insert(switches, device)
       end
     end
     if body.type == 'zone' then
@@ -250,6 +253,9 @@ function event_handler.stnp_notification_handler(driver, body)
         break
       end
     end
+  end
+  for _, device in ipairs(switches) do
+    update_switch(driver,device,body)
   end
 end
 

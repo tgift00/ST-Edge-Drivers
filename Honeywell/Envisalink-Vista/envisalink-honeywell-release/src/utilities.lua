@@ -11,6 +11,7 @@
 -- limitations under the License.
 
 local log = require('log')
+local g = require('globals')
 
 local utilities = {}
 
@@ -95,6 +96,28 @@ function utilities.set_online(driver, status)
 			dev:offline()
 		end
 	end
+end
+
+---------------------------------------
+-- Check if requested arm command is already active on partition device
+function utilities.is_already_active(device, command, capdefs)
+  local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
+  if not g.direct_change_states[current_state] then
+    return false, current_state
+  end
+  local map = g.command_map[command]
+  if not map then
+    return false, current_state
+  end
+  if current_state == 'arming' then
+    local status_msg = device.state_cache.main[capdefs.statusMessage.name].statusMessage.value or ''
+    if status_msg:find(map.keyword) then
+      return true, current_state
+    end
+  elseif map.state == current_state then
+    return true, current_state
+  end
+  return false, current_state
 end
 
 return utilities
