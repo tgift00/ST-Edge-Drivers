@@ -22,6 +22,7 @@ This driver provides a direct, local connection between the SmartThings hub and 
 - **Preference logging:** Partition preferences are now logged on startup for easier troubleshooting.
 - **Code cleanup:** Refactored shared global variables, lookup tables, and timing constants into a `globals.lua` module.
 - **Bug fix:** Fixed missing `driver` argument in `dowaitlogin` disconnect call that would cause an error if login timed out during reconnect.
+- **get_latest_state API:** Replaced state_cache direct access with get_latest_state API. This resolves root cause of the December 2025 breakage when a hub firmware update removed the underlying state cache tables that the driver was indexing directly.
 
 ### V 1.06 - 12/26/2021
 - Added carbon monoxide detector device type.
