@@ -61,7 +61,7 @@ function command_handler.on_off(driver, device, command)
     local part_dev = find_partition_device(driver, partition)
     local sw_state = 'off'
     if part_dev then
-      local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
+      local current_state = part_dev:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode')
       local map = g.command_map[dev_id]
       if map and map.state == current_state then sw_state = 'on' end
     end
@@ -72,7 +72,7 @@ function command_handler.on_off(driver, device, command)
     if dev_id ~= 'chime' and dev_id ~= 'disarm' then
       local part_dev = find_partition_device(driver, partition)
       if part_dev then
-        local current_state = part_dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value
+        local current_state = part_dev:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode')
         if g.direct_change_states[current_state] then
           local already_active = utilities.is_already_active(part_dev, dev_id, capabilitydefs)
           if already_active then
@@ -116,8 +116,8 @@ function command_handler.refresh_zone(driver,device)
   local device_list = driver:get_devices()
   for _, dev in ipairs(device_list) do
     if dev.device_network_id == partition_id then
-      if dev.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value == "ready" then
-        if not (dev.state_cache.main.bypassable.bypassStatus.value == 'bypassed' and device.state_cache.main.bypassable.bypassStatus.value == 'bypassed') then
+      if dev:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode') == "ready" then
+        if not (dev:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == 'bypassed' and device:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == 'bypassed') then
           events.zone_handler[device.model](driver,device,{state = 'closed'})
         end
       end
@@ -135,11 +135,11 @@ function command_handler.refresh_partition(driver,device)
   log.warn('Refresh partition ' .. partition_num)
   g.last_event[partition_num] = nil
   local device_list = driver:get_devices()
-  if device.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value == "ready" then
-    local bypass_partition = device.state_cache.main.bypassable.bypassStatus.value == 'bypassed'
+  if device:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode') == "ready" then
+    local bypass_partition = device:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == 'bypassed'
     for _, dev in ipairs(device_list) do
       if dev.preferences.partition == partition_num then
-        if not (bypass_partition and dev.state_cache.main.bypassable.bypassStatus.value == 'bypassed') then
+        if not (bypass_partition and dev:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == 'bypassed') then
           events.zone_handler[device.model](driver,device,{['state'] = 'closed'})
           log.debug(string.format('Clearing zone: %s', dev.device_network_id))
         end

@@ -177,14 +177,14 @@ local function update_partition(driver,device,body)
   device:emit_event(capabilities.chime.chime({value = body.chime}))
   device:emit_event(capabilities.powerSource.powerSource({value = body.power}))
   if body.battery then device:emit_event(capabilities.battery.battery({value = body.battery})) end
-  if (body.bypass ~= 'bypassed') and (device.state_cache.main.bypassable.bypassStatus.value == "bypassed") then
+  if (body.bypass ~= 'bypassed') and (device:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == "bypassed") then
     device:emit_event(capabilities.bypassable.bypassStatus({value = translate_state.bypassable[body.bypass]},{visibility = {displayed = false}}))
     local zone_body = {state = 'closed'}
     local device_list = driver:get_devices()
     for _, dev in ipairs(device_list) do
       if dev.device_network_id:match('envisalink|z|.+') then
         if tonumber(dev.preferences.partition) == tonumber(partition) then
-          if dev.state_cache.main.bypassable.bypassStatus.value == 'bypassed' then
+          if dev:get_latest_state('main', capabilities.bypassable.ID, 'bypassStatus') == 'bypassed' then
             event_handler.zone_handler[dev.model](driver,dev,zone_body)
           end
         end
@@ -234,7 +234,7 @@ function event_handler.stnp_notification_handler(driver, body)
   for _, device in ipairs(device_list) do
     if body.type == 'partition' then
       if device.device_network_id == 'envisalink|p|' .. body.partition then
-        if (device.state_cache.main[capabilitydefs.alarmMode.name].alarmMode.value ~= 'ready') and (body.state == 'ready') then event_handler.clear_partition(driver,body.partition) end
+        if (device:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode') ~= 'ready') and (body.state == 'ready') then event_handler.clear_partition(driver,body.partition) end
         event_handler.zone_handler[device.model](driver,device,body)
       end
       if device.device_network_id:match('envisalink|s|.+|'.. body.partition .. '$') then

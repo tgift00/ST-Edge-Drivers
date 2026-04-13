@@ -107,7 +107,7 @@ local function send_partition_command(driver,device,partition,command)
     log.error (string.format('Could not determine partition number for %s',device.device_network_id))
     return
   end
-  local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
+  local current_state = device:get_latest_state('main', capdefs.alarmMode.name, 'alarmMode')
   if command ~= 'disarm' and g.direct_change_states[current_state] then
     local already_active = utilities.is_already_active(device, command, capdefs)
     if already_active then

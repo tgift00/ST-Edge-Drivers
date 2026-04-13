@@ -101,7 +101,7 @@ end
 ---------------------------------------
 -- Check if requested arm command is already active on partition device
 function utilities.is_already_active(device, command, capdefs)
-  local current_state = device.state_cache.main[capdefs.alarmMode.name].alarmMode.value
+  local current_state = device:get_latest_state('main', capdefs.alarmMode.name, 'alarmMode')
   if not g.direct_change_states[current_state] then
     return false, current_state
   end
@@ -110,7 +110,7 @@ function utilities.is_already_active(device, command, capdefs)
     return false, current_state
   end
   if current_state == 'arming' then
-    local status_msg = device.state_cache.main[capdefs.statusMessage.name].statusMessage.value or ''
+    local status_msg = device:get_latest_state('main', capdefs.statusMessage.name, 'statusMessage', '') or ''
     if status_msg:find(map.keyword) then
       return true, current_state
     end
