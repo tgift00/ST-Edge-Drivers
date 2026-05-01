@@ -15,6 +15,7 @@ local globals = {
   zone_timers = { [1] = {}, [2] = {} },
   last_event = {},
   to_send_queue = {},
+  last_rx_time = nil,
   -- Command-keyed lookup tables (command -> state/keyword/security)
   -- Used by commands.lua, partitions/init.lua, and utilities.lua for
   -- command-to-state resolution and direct mode change logic.
@@ -48,6 +49,7 @@ local globals = {
   modeChangeDelay = 2,
   throttleSeconds = 2,
   keepaliveSeconds = 30,
+  noRxTimeout = 60,
 }
 
 return globals

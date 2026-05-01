@@ -62,6 +62,7 @@ function evlClient.disconnect(driver)
 
 	connected = false
 	loggedin = false
+	g.last_rx_time = nil
 	
 	if g.timers.reconnect then
 		driver:cancel_timer(g.timers.reconnect)
@@ -126,7 +127,7 @@ local function throttle_loop(driver)
 	if #g.to_send_queue > 0 then
 		local to_send = table.remove(g.to_send_queue,1)
 		for _,msg in ipairs(to_send) do
-			log.trace('THROTTLE: TX > ' .. msg)
+			log.trace('TX > ' .. msg)
 			local bytes, err = clientsock:send(msg)
 			if err then
 				log.error(string.format('Send failed: %s - triggering reconnect', err))
@@ -334,6 +335,12 @@ end
 
 local function keepalive_loop(driver)
 	if connected and loggedin then
+		if g.last_rx_time and (os.time() - g.last_rx_time) > g.noRxTimeout then
+			log.warn(string.format('No data received for %d seconds - reconnecting', os.time() - g.last_rx_time))
+			evlClient.disconnect(driver)
+			evlClient.reconnect(driver)
+			return
+		end
 		log.trace('Sending keepalive poll to Envisalink')
 		send_command(driver,evl.Commands.KeepAlive, '0')
 	end
@@ -343,6 +350,7 @@ end
 function handlers.handle_login_success(driver,sock)
 	log.info('Successfully logged in to Envisalink...')
 	loggedin = true
+	g.last_rx_time = os.time()
 	-- Set Partition 1 as active
 	send_command(driver,evl.Commands.ChangeDefaultPartition, '1')
 	-- Start keepalive polling
@@ -581,8 +589,9 @@ evlClient.msghandler = function(driver, sock)
 	end
 	
 	if (recverr ~= 'timeout') and recvbuf then
+		g.last_rx_time = os.time()
 		log.trace (string.format('RX < %s', recvbuf))
-		
+
 		handle_line(driver, sock, recvbuf)
 	
 	elseif (recverr ~= 'timeout') and (recverr ~= nil) then
