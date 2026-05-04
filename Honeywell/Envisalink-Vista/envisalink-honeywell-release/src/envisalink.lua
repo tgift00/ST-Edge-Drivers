@@ -140,7 +140,6 @@ local function throttle_loop(driver)
 		g.timers.throttle = driver:call_with_delay(g.throttleSeconds, throttle_loop, 'Throttle commands to panel')
 	else
 		log.trace('THROTTLE: No more commands to send')
-		driver:cancel_timer(g.timers.throttle)
 		g.timers.throttle = nil
 	end
 end
