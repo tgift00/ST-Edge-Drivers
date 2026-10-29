@@ -188,7 +188,7 @@ function command_handler.connect_to_envisalink(driver,device)
       socket.sleep(g.connectRetrySeconds)
       client = evlClient.connect(driver)
       retries = retries - 1
-    until retries == 0
+    until client or (retries == 0)
   end
     
   if client then  

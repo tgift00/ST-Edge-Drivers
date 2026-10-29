@@ -104,35 +104,33 @@ function evlClient.connect(driver)
 end
 
 
+-- Cancelling a timer that has already fired raises an error, so never let a cancel abort the caller
+local function cancel_timer(driver, name)
+	local t = g.timers[name]
+	g.timers[name] = nil
+	if t then
+		pcall(driver.cancel_timer, driver, t)
+	end
+end
+
 function evlClient.disconnect(driver)
 
 	connected = false
 	loggedin = false
 	g.last_rx_time = nil
 	
-	if g.timers.reconnect then
-		driver:cancel_timer(g.timers.reconnect)
-	end
-	if g.timers.waitlogin then
-		driver:cancel_timer(g.timers.waitlogin)
-	end
-	if g.timers.keepalive then
-		driver:cancel_timer(g.timers.keepalive)
-	end
-	if g.timers.throttle then
-		pcall(driver.cancel_timer, driver, g.timers.throttle)
-	end
-	g.timers.reconnect = nil
+	cancel_timer(driver, 'reconnect')
+	cancel_timer(driver, 'waitlogin')
+	cancel_timer(driver, 'keepalive')
+	cancel_timer(driver, 'throttle')
 	socket.sleep(.1)
-	g.timers.waitlogin = nil
-	g.timers.keepalive = nil
-	g.timers.throttle = nil
 	-- Anything still queued was meant for the old connection; never replay it later
 	clear_send_queue()
 
 	if clientsock then
-		driver:unregister_channel_handler(clientsock)
-		clientsock:close()
+		pcall(driver.unregister_channel_handler, driver, clientsock)
+		pcall(clientsock.close, clientsock)
+		clientsock = nil
 	end
 	utilities.set_online(driver,'offline')
 
@@ -148,11 +146,7 @@ local function dowaitlogin(driver)
 		log.warn('Failed to log into Envisalink; connect retry in 15 seconds')
 		evlClient.report_login_failure(driver)
 		evlClient.disconnect(driver)
-		if g.timers.reconnect then
-			driver:cancel_timer(g.timers.reconnect)
-			g.timers.reconnect = nil
-		end
-		g.timers.reconnect = driver:call_with_delay(g.reconnectSeconds, doreconnect, 'Re-connect timer')
+		evlClient.reconnect(driver)
 	else
 		utilities.set_online(driver,'online')
 	end
@@ -161,8 +155,13 @@ end
 -- This function invoked by delayed timer
 doreconnect = function(driver)
 
-	log.info ('Attempting to reconnect to EnvisaLink')
 	g.timers.reconnect = nil
+	if connected then
+		-- Another path (startup or settings change) already re-established the link
+		log.debug ('Reconnect skipped - already connected to EnvisaLink')
+		return
+	end
+	log.info ('Attempting to reconnect to EnvisaLink')
 	local client = evlClient.connect(driver)
 	
 	if client then
@@ -233,6 +232,11 @@ local function can_send(driver, partitionNumber)
 	end
 	log.warn(string.format('Not connected to EnvisaLink - command for partition %s not sent', partitionNumber))
 	emit_partition_status(driver, 'No connection to panel - command not sent', partitionNumber)
+	-- Safety net: if the link is down and nothing is going to bring it back, start reconnecting
+	if not connected and not g.timers.reconnect then
+		log.warn('No reconnect pending - scheduling reconnect to EnvisaLink')
+		evlClient.reconnect(driver)
+	end
 	return false
 end
 
@@ -419,6 +423,8 @@ function handlers.handle_login(driver,sock)
 end		
 
 local function keepalive_loop(driver)
+	-- This timer has fired; clear it so disconnect() doesn't try to cancel it
+	g.timers.keepalive = nil
 	if connected and loggedin then
 		if g.last_rx_time and (os.time() - g.last_rx_time) > g.noRxTimeout then
 			log.warn(string.format('No data received for %d seconds - reconnecting', os.time() - g.last_rx_time))
@@ -442,9 +448,7 @@ function handlers.handle_login_success(driver,sock)
 	-- Set Partition 1 as active
 	send_command(driver,evl.Commands.ChangeDefaultPartition, '1')
 	-- Start keepalive polling
-	if g.timers.keepalive then
-		driver:cancel_timer(g.timers.keepalive)
-	end
+	cancel_timer(driver, 'keepalive')
 	g.timers.keepalive = driver:call_with_delay(g.keepaliveSeconds, keepalive_loop, 'Keepalive timer')
 end
 
@@ -657,10 +661,7 @@ local function handle_line(driver, sock, input)
 end
 
 function evlClient.reconnect(driver)
-	if g.timers.reconnect then
-		driver:cancel_timer(g.timers.reconnect)
-		g.timers.reconnect = nil
-	end
+	cancel_timer(driver, 'reconnect')
 	g.timers.reconnect = driver:call_with_delay(g.reconnectSeconds, doreconnect, 'Re-connect timer')
 
 end
@@ -672,6 +673,14 @@ end
 evlClient.msghandler = function(driver, sock)
     local recvbuf
     local recverr
+
+	if sock ~= clientsock then
+		-- Leftover socket from an earlier connection; drop it without touching the current link
+		log.warn ('Closing stale EnvisaLink socket')
+		pcall(driver.unregister_channel_handler, driver, sock)
+		pcall(sock.close, sock)
+		return
+	end
 	recvbuf, recverr = sock:receive('*l')
 	
 	if recverr ~= nil then

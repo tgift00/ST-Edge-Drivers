@@ -14,6 +14,11 @@ This driver provides a direct, local connection between the SmartThings hub and 
 
 ## Version Notes
 
+### V 1.09
+- **RX watchdog reconnect fix:** Fixed an issue where the RX watchdog stopped the driver from reconnecting. When it detected a dead connection, the disconnect tried to cancel the keepalive timer that had just fired, which raised an error before the reconnect was scheduled. The driver then stayed offline, rejecting every command with "No connection to panel - command not sent", until it was restarted. This was seen after a whole-house power outage. Timer cancels can no longer interrupt a disconnect or reconnect.
+- **Startup duplicate connection fix:** On startup, the connect retry loop kept going after a successful attempt, which could open a second connection to the Envisalink. Because the Envisalink allows only one connection, it could close the good one and leave the driver unable to recover. The loop now stops at the first successful connect, and any leftover socket is closed without affecting the current connection.
+- **Reconnect safety net:** If a partition command arrives while the driver is disconnected and no reconnect is scheduled, a reconnect is started automatically. A reconnect that finds the driver already connected is skipped, so a second connection is never opened.
+
 ### V 1.08
 - **RX watchdog:** If no data is received from the Envisalink for 60 seconds, the driver treats the connection as dead and automatically disconnects and reconnects.
 - **Command queue stall fix:** Fixed an issue where a failed send left the command throttle timer in a stale state. All subsequent commands (and keepalives) were queued but never sent, so arm/disarm requests appeared to be accepted but did nothing until the driver was restarted. The queue is now cleared on disconnect so old commands are never replayed after a reconnect. As a safety net, if the queue has not moved for 10 seconds it is reset automatically, keeping only the newest command.
