@@ -18,6 +18,8 @@ Copyright 2021 Todd Austin
 
 local log = require "log"
 local utilities = require "utilities"
+local capabilities = require "st.capabilities"
+local capabilitydefs = require "capabilitydefs"
 
 local socket = require "cosock.socket"
 local evl = require "envisalinkdefs"
@@ -28,11 +30,47 @@ local g = require "globals"
 local clientsock
 local connected = false
 local loggedin = false
+local link_status = nil				-- nil (startup), 'up', 'down', 'login_failed'
+local connect_failures = 0
 local handlers={}
 
 local evlClient = {}
 
 evlClient.msghandler = {}			-- forward reference to msghandler function
+
+-- Post a status message to partition devices (only partitions have statusMessage).
+-- If partitionNumber is nil, all partitions get the message.
+local function emit_partition_status(driver, message, partitionNumber)
+	for _, dev in ipairs(driver:get_devices()) do
+		local dev_partition = dev.device_network_id:match('^envisalink|p|(%d+)$')
+		if dev_partition and ((partitionNumber == nil) or (tonumber(dev_partition) == tonumber(partitionNumber))) then
+			dev:emit_event(capabilities[capabilitydefs.statusMessage.name].statusMessage({value = message}))
+		end
+	end
+end
+
+-- Only post a message when the link state actually changes, so retries don't spam the status
+local function set_link_status(driver, status, message)
+	if link_status ~= status then
+		link_status = status
+		emit_partition_status(driver, message)
+	end
+end
+
+-- Connection dropped; keep a login failure message visible since it is the more useful one
+local function report_link_lost(driver, reason)
+	if link_status ~= 'login_failed' then
+		set_link_status(driver, 'down', string.format('Lost connection to EnvisaLink (%s) - retrying', reason))
+	end
+end
+
+function evlClient.report_login_failure(driver)
+	set_link_status(driver, 'login_failed', 'EnvisaLink login not completed - retrying')
+end
+
+local function clear_send_queue()
+	for i = #g.to_send_queue, 1, -1 do g.to_send_queue[i] = nil end
+end
 
 function evlClient.connect(driver)
 
@@ -48,7 +86,15 @@ function evlClient.connect(driver)
 	if ret == nil then
 		log.error (string.format('Could not connect to EnvisaLink: %s', msg))
 		client:close()
+		connect_failures = connect_failures + 1
+		if (link_status == 'down') and (connect_failures % g.reconnectReportInterval == 0) then
+			emit_partition_status(driver, string.format('Still unable to reach EnvisaLink (%d attempts, %s)', connect_failures, msg))
+		else
+			set_link_status(driver, 'down', string.format('EnvisaLink unreachable (%s) - retrying', msg))
+		end
+		return nil, msg
 	else
+		connect_failures = 0
 		client:settimeout(0)
 		connected = true
 		clientsock = client
@@ -73,11 +119,17 @@ function evlClient.disconnect(driver)
 	if g.timers.keepalive then
 		driver:cancel_timer(g.timers.keepalive)
 	end
+	if g.timers.throttle then
+		pcall(driver.cancel_timer, driver, g.timers.throttle)
+	end
 	g.timers.reconnect = nil
 	socket.sleep(.1)
 	g.timers.waitlogin = nil
 	g.timers.keepalive = nil
-	
+	g.timers.throttle = nil
+	-- Anything still queued was meant for the old connection; never replay it later
+	clear_send_queue()
+
 	if clientsock then
 		driver:unregister_channel_handler(clientsock)
 		clientsock:close()
@@ -94,6 +146,7 @@ local function dowaitlogin(driver)
 	g.timers.waitlogin = nil
 	if not loggedin then
 		log.warn('Failed to log into Envisalink; connect retry in 15 seconds')
+		evlClient.report_login_failure(driver)
 		evlClient.disconnect(driver)
 		if g.timers.reconnect then
 			driver:cancel_timer(g.timers.reconnect)
@@ -124,6 +177,14 @@ doreconnect = function(driver)
 end
 
 local function throttle_loop(driver)
+	-- This timer has fired; clear it first so no exit path (including an error) leaves a stale handle
+	-- behind that makes throttle_send think a loop is still running
+	g.timers.throttle = nil
+	if not (connected and clientsock) then
+		log.warn('THROTTLE: Not connected to EnvisaLink - discarding queued commands')
+		clear_send_queue()
+		return
+	end
 	if #g.to_send_queue > 0 then
 		local to_send = table.remove(g.to_send_queue,1)
 		for _,msg in ipairs(to_send) do
@@ -131,26 +192,48 @@ local function throttle_loop(driver)
 			local bytes, err = clientsock:send(msg)
 			if err then
 				log.error(string.format('Send failed: %s - triggering reconnect', err))
-				for i = #g.to_send_queue, 1, -1 do g.to_send_queue[i] = nil end
+				report_link_lost(driver, 'send failed: ' .. err)
 				evlClient.disconnect(driver)
 				evlClient.reconnect(driver)
 				return
 			end
 		end
+		g.throttle_scheduled_at = os.time()
 		g.timers.throttle = driver:call_with_delay(g.throttleSeconds, throttle_loop, 'Throttle commands to panel')
 	else
 		log.trace('THROTTLE: No more commands to send')
-		g.timers.throttle = nil
 	end
 end
 
 -------------------------------------------------------------------------------------------------
 local function throttle_send(driver)
+	if g.timers.throttle and ((os.time() - g.throttle_scheduled_at) > g.throttleStallSeconds) then
+		-- Throttle loop should run every throttleSeconds; if it hasn't, it's dead. Restart it, but
+		-- only with the newest command - replaying old arm/disarm commands would be dangerous.
+		log.error(string.format('THROTTLE: Command queue stalled for %d seconds - resetting', os.time() - g.throttle_scheduled_at))
+		pcall(driver.cancel_timer, driver, g.timers.throttle)
+		g.timers.throttle = nil
+		local newest = g.to_send_queue[#g.to_send_queue]
+		clear_send_queue()
+		table.insert(g.to_send_queue, newest)
+		emit_partition_status(driver, 'Command queue was stalled - reset, older commands discarded')
+	end
 	if g.timers.throttle then
 		log.trace ('THROTTLE: Message queued')
 	else
+		g.throttle_scheduled_at = os.time()
 		g.timers.throttle = driver:call_with_delay(0, throttle_loop, 'Throttle commands to panel')
 	end
+end
+
+-- Refuse to queue panel commands while not logged in, so they aren't silently lost
+local function can_send(driver, partitionNumber)
+	if loggedin then
+		return true
+	end
+	log.warn(string.format('Not connected to EnvisaLink - command for partition %s not sent', partitionNumber))
+	emit_partition_status(driver, 'No connection to panel - command not sent', partitionNumber)
+	return false
 end
 
 local function send_command(driver,code,data)
@@ -165,6 +248,7 @@ end
 
 local function send_raw(driver,to_send)
 -- Send keypress sequence to active partition
+	if not can_send(driver, 1) then return end
 	to_send = to_send .. '\n'
 	log.trace ('TX > ' .. to_send)
 	local send_array ={}
@@ -180,6 +264,7 @@ end
 
 local function keypresses_to_partition(driver,partitionNumber,keypresses)
 -- Send keypresses to a particular partition.
+	if not can_send(driver, partitionNumber) then return end
 	log.trace ('TX Keypresses > ^' .. evl.Commands.PartitionKeypress .. ',' .. partitionNumber .. ',' .. keypresses .. '$')
 	local send_array = {}
 	for char in keypresses:gmatch(".") do
@@ -327,6 +412,7 @@ function handlers.handle_login(driver,sock)
 	local bytes, err = clientsock:send(to_send)
 	if err then
 		log.error(string.format('Login send failed: %s - triggering reconnect', err))
+		report_link_lost(driver, 'login send failed: ' .. err)
 		evlClient.disconnect(driver)
 		evlClient.reconnect(driver)
 	end
@@ -336,6 +422,7 @@ local function keepalive_loop(driver)
 	if connected and loggedin then
 		if g.last_rx_time and (os.time() - g.last_rx_time) > g.noRxTimeout then
 			log.warn(string.format('No data received for %d seconds - reconnecting', os.time() - g.last_rx_time))
+			report_link_lost(driver, string.format('no data for %d seconds', os.time() - g.last_rx_time))
 			evlClient.disconnect(driver)
 			evlClient.reconnect(driver)
 			return
@@ -350,6 +437,8 @@ function handlers.handle_login_success(driver,sock)
 	log.info('Successfully logged in to Envisalink...')
 	loggedin = true
 	g.last_rx_time = os.time()
+	connect_failures = 0
+	set_link_status(driver, 'up', 'Connected to EnvisaLink')
 	-- Set Partition 1 as active
 	send_command(driver,evl.Commands.ChangeDefaultPartition, '1')
 	-- Start keepalive polling
@@ -361,10 +450,12 @@ end
 
 function handlers.handle_login_failure(driver,sock)
 	log.error ('Envisalink login failed - incorrect password')
+	set_link_status(driver, 'login_failed', 'EnvisaLink rejected password - check settings')
 end
 
 function handlers.handle_login_timeout(driver,sock)
 	log.error ('Envisalink login failed - timeout')
+	set_link_status(driver, 'login_failed', 'EnvisaLink login timed out - retrying')
 end
 
 local function get_partition_state(flags, alpha)
@@ -598,6 +689,7 @@ evlClient.msghandler = function(driver, sock)
 		
 		if recverr == 'closed' then
 			log.warn ('Envisalink has disconnected')
+			report_link_lost(driver, 'closed by EnvisaLink')
 			evlClient.disconnect(driver)
 			evlClient.reconnect(driver)
 		

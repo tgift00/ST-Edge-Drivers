@@ -209,6 +209,7 @@ function command_handler.connect_to_envisalink(driver,device)
     elseif not evlClient.is_connected(driver) then
       log.warn ('Connection lost during login - reconnect already scheduled')
     else
+      evlClient.report_login_failure(driver)
       evlClient.disconnect(driver)
       log.error ('Failed to log into EnvisaLink')
     end

@@ -9,7 +9,16 @@ This driver provides a direct, local connection between the SmartThings hub and 
 - [SmartThings Community topic](https://community.smartthings.com/t/st-edge-honeywell-ademco-vista-panel-envisalink/233766)
 - [Installation instructions](INSTALLATION.md)
 
+## Development Notes
+- **Driver Package and Install** smartthings edge:drivers:package -I (Must be run from envialink-honeywell-release directory)
+
 ## Version Notes
+
+### V 1.08
+- **RX watchdog:** If no data is received from the Envisalink for 60 seconds, the driver treats the connection as dead and automatically disconnects and reconnects.
+- **Command queue stall fix:** Fixed an issue where a failed send left the command throttle timer in a stale state. All subsequent commands (and keepalives) were queued but never sent, so arm/disarm requests appeared to be accepted but did nothing until the driver was restarted. The queue is now cleared on disconnect so old commands are never replayed after a reconnect. As a safety net, if the queue has not moved for 10 seconds it is reset automatically, keeping only the newest command.
+- **Commands rejected while disconnected:** Partition commands received while the driver is not logged in to the Envisalink are no longer silently queued. They are dropped and the partition status message shows "No connection to panel - command not sent".
+- **Connection status messages:** The partition status message now reports connection problems with the underlying reason, e.g. "Lost connection to EnvisaLink (closed by EnvisaLink) - retrying", "EnvisaLink unreachable (timeout) - retrying", "EnvisaLink rejected password - check settings", and "Connected to EnvisaLink" once logged in. Messages are only posted when the connection state changes (plus a "Still unable to reach EnvisaLink" update every 5th failed attempt) so reconnect retries do not flood the status. Once connected, the panel's keypad text takes over the status message again.
 
 ### V 1.07
 - **Direct alarm mode switching:** New partition preference "Direct Alarm Mode Switch" allows switching directly between armed modes (e.g. Armed Away → Armed Instant) without manually disarming first. The driver automatically sends a disarm followed by the new arm command with a 2 second delay. Works from partition commands, STHM integration, and virtual switches. Only allowed in safe states (arming, armedstay, armedaway, armedinstant, armedmax, alarmcleared) — blocked during active alarms. Requesting the same mode already active is ignored.

@@ -15,6 +15,7 @@ local globals = {
   zone_timers = { [1] = {}, [2] = {} },
   last_event = {},
   to_send_queue = {},
+  throttle_scheduled_at = 0,
   last_rx_time = nil,
   -- Command-keyed lookup tables (command -> state/keyword/security)
   -- Used by commands.lua, partitions/init.lua, and utilities.lua for
@@ -48,6 +49,8 @@ local globals = {
   connectRetrySeconds = 5,
   modeChangeDelay = 2,
   throttleSeconds = 2,
+  throttleStallSeconds = 10,
+  reconnectReportInterval = 5,
   keepaliveSeconds = 30,
   noRxTimeout = 60,
 }
