@@ -47,6 +47,13 @@ local function find_partition_device(driver, partition)
   return nil
 end
 
+-- Command was not sent; re-emit the switch's current state so the app doesn't show the requested one
+local function revert_switch(device)
+  local evt = capabilities.switch.switch({value = device:get_latest_state('main', capabilities.switch.ID, 'switch') or 'off'})
+  evt.state_change = true
+  device:emit_event(evt)
+end
+
 ----------------
 -- Switch command
 function command_handler.on_off(driver, device, command)
@@ -55,8 +62,11 @@ function command_handler.on_off(driver, device, command)
   local partition = device.device_network_id:match('envisalink|s|.+|(%d+)')
   log.warn (string.format('Switch flipped (%s) %s Partition %d',on_off,dev_id,partition))
   if (evlFunctions[dev_id] and (dev_id == 'triggerOne' or dev_id == 'triggerTwo')) then
-    evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,g.conf.alarmcode,partition)
-    device:emit_event(capabilities.switch.switch({value = on_off}))
+    if evlClient[evlFunctions[dev_id] .. '_' .. on_off](driver,g.conf.alarmcode,partition) then
+      device:emit_event(capabilities.switch.switch({value = on_off}))
+    else
+      revert_switch(device)
+    end
   elseif on_off == 'off' and dev_id ~= 'chime' then
     local part_dev = find_partition_device(driver, partition)
     local sw_state = 'off'
@@ -73,7 +83,8 @@ function command_handler.on_off(driver, device, command)
       local part_dev = find_partition_device(driver, partition)
       if part_dev then
         local current_state = part_dev:get_latest_state('main', capabilitydefs.alarmMode.name, 'alarmMode')
-        if g.direct_change_states[current_state] then
+        -- Stored arm state can't be trusted while disconnected; just send and let it fail
+        if evlClient.is_loggedin(driver) and g.direct_change_states[current_state] then
           local already_active = utilities.is_already_active(part_dev, dev_id, capabilitydefs)
           if already_active then
             log.info(string.format('Already in %s - skipping command %s', current_state, dev_id))
@@ -102,8 +113,11 @@ function command_handler.on_off(driver, device, command)
         end
       end
     end
-    device:emit_event(capabilities.switch.switch({value = on_off}))
-    evlClient[evlFunctions[dev_id]](driver,g.conf.alarmcode,partition)
+    if evlClient[evlFunctions[dev_id]](driver,g.conf.alarmcode,partition) then
+      device:emit_event(capabilities.switch.switch({value = on_off}))
+    else
+      revert_switch(device)
+    end
   end
 end
 

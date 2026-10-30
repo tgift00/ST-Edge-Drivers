@@ -102,7 +102,7 @@ end
 -- Check if requested arm command is already active on partition device
 function utilities.is_already_active(device, command, capdefs)
   local current_state = device:get_latest_state('main', capdefs.alarmMode.name, 'alarmMode')
-  if not g.direct_change_states[current_state] then
+  if not g.skipSameMode or not g.direct_change_states[current_state] then
     return false, current_state
   end
   local map = g.command_map[command]

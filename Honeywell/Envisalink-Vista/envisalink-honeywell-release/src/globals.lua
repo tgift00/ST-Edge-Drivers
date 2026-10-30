@@ -48,6 +48,9 @@ local globals = {
   loginWaitSeconds = 3,
   connectRetrySeconds = 5,
   modeChangeDelay = 2,
+  -- When true, a request for the arm mode already active (or already arming) is skipped.
+  -- When false, it is treated like any other mode change (disarm + re-arm if directModeChange is on).
+  skipSameMode = false,
   throttleSeconds = 2,
   throttleStallSeconds = 10,
   reconnectReportInterval = 5,

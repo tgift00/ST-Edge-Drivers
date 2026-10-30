@@ -10,9 +10,14 @@ This driver provides a direct, local connection between the SmartThings hub and 
 - [Installation instructions](INSTALLATION.md)
 
 ## Development Notes
-- **Driver Package and Install** smartthings edge:drivers:package -I (Must be run from envialink-honeywell-release directory)
+- **Driver Package and Install** smartthings edge:drivers:package -I (Must be run from envisalink-honeywell-release directory)
 
 ## Version Notes
+
+### V 1.10
+- **Same-mode requests no longer ignored:** Requesting the arm mode that is already active (or already arming) is no longer skipped. With "Direct Alarm Mode Switch" enabled, the driver disarms and re-arms in the same mode, which restarts the exit delay. With it disabled, the request is rejected and the current state is restored. The previous skip behavior can be restored by setting `skipSameMode = true` in `globals.lua`.
+- **Stale state while disconnected:** When the driver is not logged in to the EnvisaLink, the stored partition state may be out of date (e.g. after a power outage). Partition and switch commands now skip the already-active and direct mode change logic while disconnected and are sent as-is, so they fail with "No connection to panel - command not sent" and start a reconnect instead of acting on a stale state.
+- **Switch state on failed commands:** Virtual switches are now only turned on after the command is accepted for sending. If the command can't be sent because the driver is disconnected, the switch is returned to its previous state instead of showing on.
 
 ### V 1.09
 - **RX watchdog reconnect fix:** Fixed an issue where the RX watchdog stopped the driver from reconnecting. When it detected a dead connection, the disconnect tried to cancel the keepalive timer that had just fired, which raised an error before the reconnect was scheduled. The driver then stayed offline, rejecting every command with "No connection to panel - command not sent", until it was restarted. This was seen after a whole-house power outage. Timer cancels can no longer interrupt a disconnect or reconnect.

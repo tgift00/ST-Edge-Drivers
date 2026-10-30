@@ -252,13 +252,14 @@ end
 
 local function send_raw(driver,to_send)
 -- Send keypress sequence to active partition
-	if not can_send(driver, 1) then return end
+	if not can_send(driver, 1) then return false end
 	to_send = to_send .. '\n'
 	log.trace ('TX > ' .. to_send)
 	local send_array ={}
 	table.insert(send_array,to_send)
 	table.insert(g.to_send_queue,send_array)
 	throttle_send(driver)
+	return true
 end
 
 local function dump_zone_timers(driver)
@@ -268,7 +269,7 @@ end
 
 local function keypresses_to_partition(driver,partitionNumber,keypresses)
 -- Send keypresses to a particular partition.
-	if not can_send(driver, partitionNumber) then return end
+	if not can_send(driver, partitionNumber) then return false end
 	log.trace ('TX Keypresses > ^' .. evl.Commands.PartitionKeypress .. ',' .. partitionNumber .. ',' .. keypresses .. '$')
 	local send_array = {}
 	for char in keypresses:gmatch(".") do
@@ -276,15 +277,16 @@ local function keypresses_to_partition(driver,partitionNumber,keypresses)
 	end
 	table.insert(g.to_send_queue,send_array)
 	throttle_send(driver)
+	return true
 end
 
 function evlClient.disarm_partition(driver,code,partitionNumber)
 -- Disarm a partition
 	local to_send = code .. evl.ArmCommands.disarm
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -292,9 +294,9 @@ function evlClient.arm_away_partition(driver,code,partitionNumber)
 -- Arm away a partition
 	local to_send = code .. evl.ArmCommands.armAway
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -302,9 +304,9 @@ function evlClient.arm_stay_partition(driver,code,partitionNumber)
 -- Arm stay a partition
 	local to_send = code .. evl.ArmCommands.armStay
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -312,9 +314,9 @@ function evlClient.arm_instant_partition(driver,code,partitionNumber)
 -- Arm instant a partition
 	local to_send = code .. evl.ArmCommands.armInstant
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 	
@@ -322,9 +324,9 @@ function evlClient.arm_night_partition(driver,code,partitionNumber)
 -- Arm night a partition
 	local to_send = code .. evl.ArmCommands.armNight
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -332,9 +334,9 @@ function evlClient.arm_max_partition(driver,code,partitionNumber)
 -- Arm max a partition
 	local to_send = code .. evl.ArmCommands.armMax
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -342,9 +344,9 @@ function evlClient.chime_partition(driver,code,partitionNumber)
 -- Toggle chime for a partition
 	local to_send = code .. evl.ArmCommands.chime
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -360,9 +362,9 @@ function evlClient.bypass_zone_partition(driver,code,partitionNumber,zone)
 			zone_string = zone_string .. zone
 			local to_send = code .. evl.ArmCommands.bypass .. zone_string
 			if tonumber(partitionNumber) == 1 then
-				send_raw(driver,to_send)
+				return send_raw(driver,to_send)
 			else
-				keypresses_to_partition(driver,partitionNumber,to_send)
+				return keypresses_to_partition(driver,partitionNumber,to_send)
 			end
 		end
 	end
@@ -372,9 +374,9 @@ function evlClient.trigger_one_partition_on(driver,code,partitionNumber)
 -- Turn trigger 1 on
 	local to_send = code .. evl.ArmCommands.triggerOneOn
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -382,9 +384,9 @@ function evlClient.trigger_one_partition_off(driver,code,partitionNumber)
 -- Turn trigger 1 off
 	local to_send = code .. evl.ArmCommands.triggerOneOff
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -392,9 +394,9 @@ function evlClient.trigger_two_partition_on(driver,code,partitionNumber)
 -- Turn trigger 1 on
 	local to_send = code .. evl.ArmCommands.triggerTwoOn
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 
@@ -402,9 +404,9 @@ function evlClient.trigger_two_partition_off(driver,code,partitionNumber)
 -- Turn trigger 1 off
 	local to_send = code .. evl.ArmCommands.triggerTwoOff
 	if tonumber(partitionNumber) == 1 then
-		send_raw(driver,to_send)
+		return send_raw(driver,to_send)
 	else
-		keypresses_to_partition(driver,partitionNumber,to_send)
+		return keypresses_to_partition(driver,partitionNumber,to_send)
 	end
 end
 

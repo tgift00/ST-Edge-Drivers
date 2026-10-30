@@ -15,6 +15,7 @@
 local capabilities = require('st.capabilities')
 local log = require('log')
 local commands = require('commands')
+local evlClient = require('envisalink')
 local capdefs = require('capabilitydefs')
 local events = require "evthandler"
 local g = require('globals')
@@ -108,7 +109,8 @@ local function send_partition_command(driver,device,partition,command)
     return
   end
   local current_state = device:get_latest_state('main', capdefs.alarmMode.name, 'alarmMode')
-  if command ~= 'disarm' and g.direct_change_states[current_state] then
+  -- Stored arm state can't be trusted while disconnected; just send and let it fail
+  if command ~= 'disarm' and evlClient.is_loggedin(driver) and g.direct_change_states[current_state] then
     local already_active = utilities.is_already_active(device, command, capdefs)
     if already_active then
       log.info(string.format('Already in %s - skipping command %s', current_state, command))
